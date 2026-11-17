@@ -11,6 +11,9 @@
 <link href="css/styles.css" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="js/tailwind-config.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
 </head>
 <body class="bg-surface-container-low text-on-surface font-body-md text-body-md antialiased min-h-screen flex flex-col justify-center items-center">
 <main class="w-full">
@@ -29,7 +32,7 @@
 <h1 class="font-headline-sm text-headline-sm text-on-surface mb-1.5">Iniciar sesión en TicketHub</h1>
 <p class="font-body-sm text-body-sm text-secondary">Ingresa tus credenciales para acceder a la mesa de ayuda</p>
 </div>
-<form class="flex flex-col gap-4" onsubmit="event.preventDefault(); location.href = TH.homeFor();">
+<form class="flex flex-col gap-4" onsubmit="login(event, this)">
 <div class="flex flex-col gap-1.5">
 <label class="font-label-md text-label-md text-on-surface flex items-center justify-between" for="corporate-email">
 <span>Correo electrónico corporativo</span>
@@ -51,6 +54,7 @@
 </div>
 </div>
 
+<p class="hidden font-label-md text-label-md text-error" id="login-error" role="alert"></p>
 <button class="w-full h-10 mt-2 bg-primary-container hover:bg-primary active:scale-[0.98] text-on-primary font-label-md text-label-md rounded-lg flex items-center justify-center gap-2 shadow-md shadow-primary-container/20 transition-all cursor-pointer" type="submit">
 <span>Iniciar sesión</span>
 <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
@@ -75,6 +79,27 @@
     pwdIcon.textContent = isPassword ? 'visibility_off' : 'visibility';
   });
 })();
+</script>
+<script>
+async function login(event, form) {
+  event.preventDefault();
+  const button = form.querySelector('button[type="submit"]');
+  const error = document.getElementById('login-error');
+  error.classList.add('hidden');
+  button.disabled = true;
+  try {
+    const auth = await TH.auth.login(
+      document.getElementById('corporate-email').value,
+      document.getElementById('password').value
+    );
+    TH.session.save(auth);
+    location.href = TH.homeFor(auth.user.role);
+  } catch (e) {
+    error.textContent = e.message;
+    error.classList.remove('hidden');
+    button.disabled = false;
+  }
+}
 </script>
 </body>
 </html>
