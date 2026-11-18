@@ -2,7 +2,16 @@
 // Requiere js/config.js cargado antes. La sesión (TH.session) la define js/app.js.
 (function () {
   const TH = (window.TH = window.TH || {});
-  const BASE_URL = (window.TH_CONFIG && window.TH_CONFIG.API_URL) || 'http://localhost:8080';
+  const BASE_URL = (window.TH_CONFIG && window.TH_CONFIG.API_URL) || 'http://localhost:8080/api/v1';
+  const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+  // El JWT viaja en una cookie HttpOnly que JavaScript no puede leer; el navegador la manda solo.
+  // Para POST/PUT/PATCH/DELETE el back exige además el token CSRF: viene en la cookie XSRF-TOKEN
+  // (esa sí es legible) y se reenvía en el header X-XSRF-TOKEN.
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+  }
 
   // El back responde los errores con { title, detail, errors? } (formato ProblemDetail).
   function messageFrom(status, problem) {
@@ -23,20 +32,24 @@
   TH.ApiError = ApiError;
 
   /**
-   * fetch con la URL base y el token ya puestos.
-   *   TH.api('/users/me')
+   * fetch con la URL base, la cookie de sesión y el token CSRF ya puestos.
+   *   TH.api('/auth/me')
    *   TH.api('/auth/login', { method: 'POST', body: { ... }, auth: false })
    */
   TH.api = async function (path, { method = 'GET', body, auth = true } = {}) {
     const headers = { 'Content-Type': 'application/json' };
+    if (!SAFE_METHODS.includes(method.toUpperCase())) {
+      const csrf = readCookie('XSRF-TOKEN');
+      if (csrf) headers['X-XSRF-TOKEN'] = csrf;
+    }
     const session = TH.session && TH.session.get();
-    if (auth && session) headers.Authorization = 'Bearer ' + session.token;
 
     let response;
     try {
       response = await fetch(BASE_URL + path, {
         method,
         headers,
+        credentials: 'include', // manda y recibe las cookies aunque la API esté en otro puerto
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (e) {
@@ -61,6 +74,7 @@
       TH.api('/auth/login', { method: 'POST', body: { email, password }, auth: false }),
     register: (name, email, password) =>
       TH.api('/auth/register', { method: 'POST', body: { name, email, password }, auth: false }),
-    me: () => TH.api('/users/me'),
+    me: () => TH.api('/auth/me'),
+    logout: () => TH.api('/auth/logout', { method: 'POST', auth: false }),
   };
 })();

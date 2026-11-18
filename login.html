@@ -93,7 +93,7 @@ async function login(event, form) {
       document.getElementById('password').value
     );
     TH.session.save(auth);
-    location.href = TH.homeFor(auth.user.role);
+    location.href = TH.homeFor(auth.role);
   } catch (e) {
     error.textContent = e.message;
     error.classList.remove('hidden');

@@ -17,24 +17,19 @@
   const isPublicPage = () => PUBLIC_PAGES.includes(currentPage());
 
   // ---------- Sesión ----------
-  // El token vive en localStorage. El front solo lee su fecha de vencimiento para no mostrar
-  // pantallas con una sesión muerta; quien decide si el token vale es siempre el back.
-  function readExpiry(token) {
-    try {
-      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-      return JSON.parse(atob(padded)).exp * 1000;
-    } catch (e) {
-      return 0;
-    }
+  // El JWT vive en una cookie HttpOnly: este archivo nunca lo ve. En localStorage solo se guardan
+  // los datos para pintar la pantalla (nombre, rol, vencimiento), que no sirven para autenticarse.
+  // Quien decide si la sesión vale es siempre el back (/auth/me y el 401 de TH.api).
+  function toUser(auth) {
+    return { id: auth.id, name: auth.name, email: auth.email, role: auth.role };
   }
 
   TH.session = {
     get() {
       try {
         const session = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (!session || !session.token || !session.user) return null;
-        if (readExpiry(session.token) <= Date.now()) {
+        if (!session || !session.user || !session.expiresAt) return null;
+        if (Date.parse(session.expiresAt) <= Date.now()) {
           this.clear();
           return null;
         }
@@ -43,12 +38,12 @@
         return null;
       }
     },
+    /** Recibe el AuthResponse del back: { id, name, email, role, expiresAt }. */
     save(auth) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: auth.token, user: auth.user }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: toUser(auth), expiresAt: auth.expiresAt }));
     },
-    updateUser(user) {
-      const session = this.get();
-      if (session) this.save({ token: session.token, user });
+    updateUser(auth) {
+      if (this.get()) this.save(auth);
     },
     clear() {
       try {
@@ -65,7 +60,13 @@
     return 'dashboard.html';
   };
 
-  TH.logout = function () {
+  // La cookie HttpOnly solo la puede borrar el back; aunque falle la llamada se limpia lo local.
+  TH.logout = async function () {
+    try {
+      if (TH.auth) await TH.auth.logout();
+    } catch (e) {
+      /* sin red o sesión ya vencida: igual se sale */
+    }
     TH.session.clear();
     location.href = 'login.html';
   };
